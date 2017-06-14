@@ -18,6 +18,7 @@ class SyncServerThread extends Thread {
 	private static SynchronisedFile file;
 	private static String filename;
 	private static Boolean newNegotiation = true;
+        private static Boolean newSincroniz;
 	private static String action = "";
 	private static int blockSize;
         private static Socket clientSocket;
@@ -25,10 +26,9 @@ class SyncServerThread extends Thread {
         private static DataOutputStream out;
 	
 	public SyncServerThread ( String fn,Socket cS) {
-		
-            
                 filename = fn;
-		clientSocket=cS;                
+		clientSocket=cS;           
+                newSincroniz=true;
                
             try {
                 in = new DataInputStream(clientSocket.getInputStream());
@@ -42,7 +42,7 @@ class SyncServerThread extends Thread {
 	public void run() {
 		int i = 0;
                 String data;
-		while (true){
+		while (newSincroniz){
 			try { // an echo server
                             
 				if( newNegotiation ) {
@@ -79,7 +79,7 @@ class SyncServerThread extends Thread {
                                             } catch (IOException e){
                                                 System.out.println("Could not receive action confirmation from server: " + e.getMessage());
                                                 e.printStackTrace();
-//                                               System.exit(-1);
+                                               System.exit(-1);
                                             }
                                             
                                         }
@@ -105,23 +105,27 @@ class SyncServerThread extends Thread {
 					 * conexión.
 					 * 
 					 */
+                                        System.out.println("Action received: " + action);
+                                        System.out.println("Server reading data");	
                                          switch( action ){
-                                                case "commit":
-                                                        String msg = in.readUTF(); // read a line of data from the stream
-                                                        System.out.println("Recibido: " + msg);                                          
-                                                        actAsReceiver(msg);                                                        
+                                                case "commit":    
+                                                        while(!newNegotiation){
+                                                            String msg = in.readUTF(); // read a line of data from the stream
+                                                            System.out.println("Recibido: " + msg);                                          
+                                                            actAsReceiver(msg);        
+                                                        }                                                            
+                                                        
                                                         break;
                                                 case "update":
-                        //                            actAsSender();
-                                                        break;
+                                                    actAsSender();
+                                                    break;
                                                 default:
-                                                        System.out.println( "Invalid action. Usage: java -jar syncclient.jar hostname filename (commit | update) blocksize" );
+                                                       System.out.println( "Invalid action. Usage: java -jar syncclient.jar hostname filename (commit | update) blocksize" );
                                                         System.exit(-1);
                                         }
-					// System.out.println("Server reading data");
+						
 					
 					
-					//System.out.println("Action received: " + action);
 				}
 				
 				/**
@@ -150,7 +154,7 @@ class SyncServerThread extends Thread {
 			Instruction receivedInst ;                        
                         InstructionFactory instFact=new InstructionFactory();                          
                         receivedInst = instFact.FromJSON(msg);                            
-                        
+                        System.out.println("pakREc"+receivedInst);
 			try {
                             file.ProcessInstruction(receivedInst);                                
                             System.out.println("servidor cambaiandotexto");
@@ -183,7 +187,8 @@ class SyncServerThread extends Thread {
 					String msg2=in.readUTF();
 					Instruction receivedInst2 =instFact.FromJSON(msg2);
 					file.ProcessInstruction( receivedInst2 );
-                                        System.out.println("Server reading NEW");
+                                       // System.out.println("srn:"+receivedInst2.ToJSON());
+                                        System.out.println("Server reading NEW luego");
                                         
 				} catch (IOException e1) {
 					System.out.println( e1.getMessage() );
@@ -210,6 +215,7 @@ class SyncServerThread extends Thread {
 				newNegotiation = true; // la sincronización se ha finalizado, entonces la siguiente será una nueva negociación de parametros
 				action = "";
 				blockSize = 0;
+                                newSincroniz=false;
 			}
 		} catch (IOException ex) {
 			System.out.println(ex.getMessage());
@@ -217,86 +223,95 @@ class SyncServerThread extends Thread {
 		}
 	}
 	
-//	private static void actAsSender() {
-//		// arguments supply hostname filename
-//
-//		Instruction inst;
-//		
-//		try {
-//			System.out.println("SyncServer: calling fromFile.CheckFileState()");
-//			file.CheckFileState();
-//		} catch (IOException ex) {
-//			System.out.println(ex.getMessage());
-//			System.exit(-1);
-//		} catch (InterruptedException ex) {
-//			System.out.println(ex.getMessage());
-//			System.exit(-1);
-//		}
-//		
-//		// The server reads instructions to send to the client
-//		while( ( inst = file.NextInstruction() ) != null ){
-//			/**
-//			 * El servidor envia las instrucciones de sincronización 
-//			 * hacia el cliente
-//			 * 
-//			 * Los mensajes deben ser empaquetados utilizando el 
-//			 * método ToJSON() dentro de la clase Instruction
-//			 */
-//			try {
-//				// System.out.println( "Sending: " + msg );
-//
-//				
-//				// System.out.println( "Received: " + reply );
-//
-//				/** Si el servidor envia como respuesta "NEW", quiere
-//				 * decir que existe un cambio en el archivo y por lo
-//				 * tanto el cliente debe cambiar el CopyBlock por un 
-//				 * NewBlock
-//				 */ 
-//				if( reply.equals( "NEW" ) ) {
-//					/*
-//					 * El servidor cambia la instrucción CopyBlock por 
-//					 * una NewBlock y lo envia.
-//					 * El mensaje debe ser empaquetado antes de 
-//					 * enviarse.
-//					 */
-//					Instruction upgraded = new NewBlockInstruction( ( CopyBlockInstruction ) inst );
-//					
-//					/**
-//					 * Enviar la la nueva instrucción al servidor 
-//					 * y recibir el acuso de recibo
-//					 */ 
-//					// System.err.println( "Sending: " + msg2 );
-//					
-//				}
-//			}catch (UnknownHostException e) {
-//				System.out.println( "Socket: " + e.getMessage() );
-//				System.exit(-1);
-//			}catch (EOFException e){
-//				System.out.println( "EOF: " + e.getMessage() );
-//				System.exit(-1);
-//			}catch (IOException e){
-//				System.out.println( "readline: " + e.getMessage() );
-//				System.exit(-1);
-//			}
-//
-//			/**
-//			 * Verificar que el acuso de recibo es OK y moverse a 
-//			 * la siguiente instrucción
-//			 */
-//			while( !reply.equals( "OK" ) ) {
-//				//...
-//			}
-//			// System.out.println("OK received. Move to the next instruction.");
-//			
-//			//finalise sync
-//			if( inst.Type().equals("EndUpdate")  ) {
-//				System.out.println("Sync finalised.");
-//				newNegotiation = true;// se puede empezar una nueva negociación de parámetros.
-//				action = "";
-//				blockSize = 0;
-//				break;
-//			}
-//		}
-//	}
+	private static void actAsSender() {
+		// arguments supply hostname filename
+                String reply = "";
+		Instruction inst;
+		
+		try {
+			System.out.println("SyncServer: calling fromFile.CheckFileState()");
+			file.CheckFileState();
+		} catch (IOException ex) {
+			System.out.println(ex.getMessage());
+			System.exit(-1);
+		} catch (InterruptedException ex) {
+			System.out.println(ex.getMessage());
+			System.exit(-1);
+		}
+		
+		// The server reads instructions to send to the client
+		while( ( inst = file.NextInstruction() ) != null ){
+			/**
+			 * El servidor envia las instrucciones de sincronización 
+			 * hacia el cliente
+			 * 
+			 * Los mensajes deben ser empaquetados utilizando el 
+			 * método ToJSON() dentro de la clase Instruction
+			 */
+			try {
+			    String msg = inst.ToJSON();
+                            out.writeUTF(msg);
+                            System.out.println( "Sending msg: " + msg );                            
+                            reply= in.readUTF();			 	
+                            
+			  
+			  
+			    System.out.println( "Received: "+ reply );
+
+				/** Si el servidor envia como respuesta "NEW", quiere
+				 * decir que existe un cambio en el archivo y por lo
+				 * tanto el cliente debe cambiar el CopyBlock por un 
+				 * NewBlock
+				 */ 
+				if( reply.equals( "NEW" ) ) {
+					/*
+					 * El servidor cambia la instrucción CopyBlock por 
+					 * una NewBlock y lo envia.
+					 * El mensaje debe ser empaquetado antes de 
+					 * enviarse.
+					 */
+					Instruction upgraded = new NewBlockInstruction( ( CopyBlockInstruction ) inst );
+					
+					/**
+					 * Enviar la la nueva instrucción al servidor 
+					 * y recibir el acuso de recibo
+					 */ 
+					String msg2 = upgraded.ToJSON();
+                                        out.writeUTF(msg2);
+                                        System.out.println( "Sendingmg2: " + msg2 );                            
+                                        reply= in.readUTF();			 						
+                                        System.out.println( "Sending resp: " + reply ); 
+					
+				}
+			}catch (UnknownHostException e) {
+				System.out.println( "Socket: " + e.getMessage() );
+				System.exit(-1);
+			}catch (EOFException e){
+				System.out.println( "EOF: " + e.getMessage() );
+				System.exit(-1);
+			}catch (IOException e){
+				System.out.println( "readline: " + e.getMessage() );
+				System.exit(-1);
+			}
+
+			/**
+			 * Verificar que el acuso de recibo es OK y moverse a 
+			 * la siguiente instrucción
+			 */
+			while( !reply.equals( "OK" ) ) {
+                            System.out.println("while");
+			}
+			 System.out.println("OK received. Move to the next instruction.");
+			
+			//finalise sync
+			if( inst.Type().equals("EndUpdate")  ) {
+				System.out.println("Sync finalised.");
+				newNegotiation = true;// se puede empezar una nueva negociación de parámetros.
+                                newSincroniz=false;
+				action = "";
+				blockSize = 0;
+				break;
+			}
+		}
+	}
 }
